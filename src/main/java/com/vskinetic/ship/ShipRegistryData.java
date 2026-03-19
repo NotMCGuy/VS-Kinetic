@@ -1,7 +1,7 @@
 package com.vskinetic.ship;
 
 import com.vskinetic.Config;
-import com.vskinetic.ExampleMod;
+import com.vskinetic.KineticMod;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public class ShipRegistryData extends SavedData {
-    private static final String DATA_NAME = ExampleMod.MODID + "_ship_registry";
+    private static final String DATA_NAME = KineticMod.MODID + "_ship_registry";
     private static final String KEY_RECORDS = "Records";
 
     private final Map<Long, ShipBindingRecord> records = new HashMap<>();
