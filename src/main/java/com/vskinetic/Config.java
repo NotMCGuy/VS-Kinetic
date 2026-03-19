@@ -47,6 +47,54 @@ public class Config
             .comment("When recovering a ship, integrity is restored to at least this value.")
             .defineInRange("recoveryIntegrityFloor", 35.0D, 0.0D, 100.0D);
 
+    private static final ForgeConfigSpec.DoubleValue LOW_INTEGRITY_THRESHOLD = BUILDER
+            .comment("Integrity threshold where damaged ships start suffering ongoing drag.")
+            .defineInRange("lowIntegrityThreshold", 45.0D, 0.0D, 100.0D);
+
+    private static final ForgeConfigSpec.DoubleValue CRITICAL_INTEGRITY_THRESHOLD = BUILDER
+            .comment("Integrity threshold where damaged ships suffer severe drag after crashes.")
+            .defineInRange("criticalIntegrityThreshold", 20.0D, 0.0D, 100.0D);
+
+    private static final ForgeConfigSpec.DoubleValue LOW_INTEGRITY_DECELERATION = BUILDER
+            .comment("Approximate world-space deceleration applied to low-integrity ships each tick.")
+            .defineInRange("lowIntegrityDeceleration", 0.35D, 0.0D, 100.0D);
+
+    private static final ForgeConfigSpec.DoubleValue CRITICAL_INTEGRITY_DECELERATION = BUILDER
+            .comment("Approximate world-space deceleration applied to critically damaged ships each tick.")
+            .defineInRange("criticalIntegrityDeceleration", 1.10D, 0.0D, 100.0D);
+
+    private static final ForgeConfigSpec.DoubleValue CRASH_NOTIFICATION_RADIUS = BUILDER
+            .comment("Radius in blocks for crash alerts sent to nearby players.")
+            .defineInRange("crashNotificationRadius", 96.0D, 0.0D, 100000.0D);
+
+    private static final ForgeConfigSpec.DoubleValue DECK_IMPACT_VERTICAL_SPEED = BUILDER
+            .comment("Minimum downward speed before deck impacts can crumple the ship nose.")
+            .defineInRange("deckImpactVerticalSpeed", 8.0D, 0.0D, 1000.0D);
+
+    private static final ForgeConfigSpec.DoubleValue FRONT_CRUMPLE_RADIUS = BUILDER
+            .comment("Base radius in blocks for front-of-ship crumple damage.")
+            .defineInRange("frontCrumpleRadius", 2.4D, 0.0D, 64.0D);
+
+    private static final ForgeConfigSpec.DoubleValue FRONT_CRUMPLE_DEPTH = BUILDER
+            .comment("Base depth in blocks for front-of-ship crumple damage.")
+            .defineInRange("frontCrumpleDepth", 4.0D, 0.0D, 128.0D);
+
+    private static final ForgeConfigSpec.IntValue CATASTROPHIC_EXPLOSION_DELAY_TICKS = BUILDER
+            .comment("Delay in ticks between catastrophic front impacts and the follow-up explosion.")
+            .defineInRange("catastrophicExplosionDelayTicks", 8, 0, 1200);
+
+    private static final ForgeConfigSpec.DoubleValue CATASTROPHIC_EXPLOSION_POWER = BUILDER
+            .comment("Minimum explosion power for catastrophic front impacts.")
+            .defineInRange("catastrophicExplosionPower", 4.5D, 0.0D, 100.0D);
+
+    private static final ForgeConfigSpec.DoubleValue BELLY_SCRAPE_BLOCKS_PER_MPS = BUILDER
+            .comment("How many blocks of belly scrape damage are applied per m/s of horizontal speed.")
+            .defineInRange("bellyScrapeBlocksPerMps", 0.35D, 0.0D, 10.0D);
+
+    private static final ForgeConfigSpec.DoubleValue GEAR_COLLAPSE_DESTRUCTION_FACTOR = BUILDER
+            .comment("Fraction of bottom-hull blocks destroyed during a gear collapse on HARD crashes (CATASTROPHIC always destroys all).")
+            .defineInRange("gearCollapseDestructionFactor", 0.45D, 0.0D, 1.0D);
+
     static final ForgeConfigSpec SPEC = BUILDER.build();
 
     public static double minCrashSpeed;
@@ -58,11 +106,22 @@ public class Config
     public static double catastrophicCrashScore;
     public static double crashDamageMultiplier;
     public static double recoveryIntegrityFloor;
+    public static double lowIntegrityThreshold;
+    public static double criticalIntegrityThreshold;
+    public static double lowIntegrityDeceleration;
+    public static double criticalIntegrityDeceleration;
+    public static double crashNotificationRadius;
+    public static double deckImpactVerticalSpeed;
+    public static double frontCrumpleRadius;
+    public static double frontCrumpleDepth;
+    public static int catastrophicExplosionDelayTicks;
+    public static double catastrophicExplosionPower;
+    public static double bellyScrapeBlocksPerMps;
+    public static double gearCollapseDestructionFactor;
 
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event)
     {
-
         minCrashSpeed = MIN_CRASH_SPEED.get();
         minDeltaV = MIN_DELTA_V.get();
         minImpactEnergy = MIN_IMPACT_ENERGY.get();
@@ -72,5 +131,17 @@ public class Config
         catastrophicCrashScore = CATASTROPHIC_CRASH_SCORE.get();
         crashDamageMultiplier = CRASH_DAMAGE_MULTIPLIER.get();
         recoveryIntegrityFloor = RECOVERY_INTEGRITY_FLOOR.get();
+        lowIntegrityThreshold = LOW_INTEGRITY_THRESHOLD.get();
+        criticalIntegrityThreshold = CRITICAL_INTEGRITY_THRESHOLD.get();
+        lowIntegrityDeceleration = LOW_INTEGRITY_DECELERATION.get();
+        criticalIntegrityDeceleration = CRITICAL_INTEGRITY_DECELERATION.get();
+        crashNotificationRadius = CRASH_NOTIFICATION_RADIUS.get();
+        deckImpactVerticalSpeed = DECK_IMPACT_VERTICAL_SPEED.get();
+        frontCrumpleRadius = FRONT_CRUMPLE_RADIUS.get();
+        frontCrumpleDepth = FRONT_CRUMPLE_DEPTH.get();
+        catastrophicExplosionDelayTicks = CATASTROPHIC_EXPLOSION_DELAY_TICKS.get();
+        catastrophicExplosionPower = CATASTROPHIC_EXPLOSION_POWER.get();
+        bellyScrapeBlocksPerMps = BELLY_SCRAPE_BLOCKS_PER_MPS.get();
+        gearCollapseDestructionFactor = GEAR_COLLAPSE_DESTRUCTION_FACTOR.get();
     }
 }

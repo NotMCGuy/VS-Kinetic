@@ -1,6 +1,7 @@
 package com.vskinetic;
 
 import com.vskinetic.ship.ShipCommands;
+import com.vskinetic.ship.ShipRuntimeEvents;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -26,6 +27,7 @@ public class KineticMod
 
         // Register ourselves for server and other game events we are interested in
         MinecraftForge.EVENT_BUS.register(this);
+        MinecraftForge.EVENT_BUS.register(new ShipRuntimeEvents());
 
         // Register our mod's ForgeConfigSpec so that Forge creates/loads config/vskinetic.toml
         context.registerConfig(ModConfig.Type.COMMON, Config.SPEC, "vskinetic.toml");
