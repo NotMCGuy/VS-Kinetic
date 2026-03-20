@@ -13,7 +13,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
-import org.joml.primitives.AABBic;
 import org.valkyrienskies.core.api.ships.LoadedServerShip;
 
 import java.util.ArrayList;
@@ -130,17 +129,12 @@ public final class ShipCrashConsequences {
             return null;
         }
 
-        AABBic bounds = ship.getShipAABB();
-        if (bounds == null) {
-            return null;
-        }
-
         Vec3 approachVelocity = previousVelocity.lengthSqr() >= currentVelocity.lengthSqr() ? previousVelocity : currentVelocity;
         if (approachVelocity.lengthSqr() < 1.0E-4D) {
             return null;
         }
 
-        Vec3 impactImpulse = previousVelocity.subtract(currentVelocity);
+        Vec3 impactImpulse = currentVelocity.subtract(previousVelocity);
         if (impactImpulse.length() < MIN_IMPULSE_FOR_FRONT_CRUMPLE) {
             return null;
         }
@@ -161,9 +155,9 @@ public final class ShipCrashConsequences {
                 && downwardSpeed >= BELLY_SCRAPE_MIN_DOWNWARD_SPEED
                 && upwardImpulse >= downwardSpeed * 0.3D;
 
-        double forwardImpulse = impactImpulse.dot(approachVelocity.normalize());
+        double counterImpulse = -impactImpulse.dot(approachVelocity.normalize());
         if (!deckImpact && !bellyScrape
-                && forwardImpulse < Math.max(MIN_IMPULSE_FOR_FRONT_CRUMPLE, result.deltaV() * 0.4D)) {
+                && counterImpulse < Math.max(MIN_IMPULSE_FOR_FRONT_CRUMPLE, result.deltaV() * 0.4D)) {
             return null;
         }
 
@@ -173,11 +167,18 @@ public final class ShipCrashConsequences {
         }
         travelDirLocal.normalize();
 
-        Vector3d impactPoint = supportPoint(bounds, travelDirLocal);
-        impactPoint.sub(new Vector3d(travelDirLocal).mul(0.85D));
-        if (deckImpact) {
-            Vector3d bottomPoint = supportPoint(bounds, new Vector3d(0.0D, -1.0D, 0.0D));
-            impactPoint = impactPoint.mul(0.65D, new Vector3d()).add(bottomPoint.mul(0.35D, new Vector3d()));
+        ShipBounds bounds = getShipBounds(ship);
+        Vector3d impactPoint;
+        if (bounds != null) {
+            impactPoint = supportPoint(bounds, travelDirLocal);
+            impactPoint.sub(new Vector3d(travelDirLocal).mul(0.85D));
+            if (deckImpact) {
+                Vector3d bottomPoint = supportPoint(bounds, new Vector3d(0.0D, -1.0D, 0.0D));
+                impactPoint = impactPoint.mul(0.65D, new Vector3d()).add(bottomPoint.mul(0.35D, new Vector3d()));
+            }
+        } else {
+            // Fallback: keep effects active even if ship AABB introspection is unavailable.
+            impactPoint = new Vector3d(travelDirLocal).mul(0.75D);
         }
 
         return new ImpactProfile(impactPoint, travelDirLocal, impulseDirWorld, deckImpact, bellyScrape);
@@ -241,7 +242,7 @@ public final class ShipCrashConsequences {
             CrashPhysicsEngine.CrashResult result,
             Vec3 previousVelocity
     ) {
-        AABBic bounds = ship.getShipAABB();
+        ShipBounds bounds = getShipBounds(ship);
         if (bounds == null) {
             return;
         }
@@ -328,7 +329,7 @@ public final class ShipCrashConsequences {
             ImpactProfile profile,
             CrashPhysicsEngine.CrashResult result
     ) {
-        AABBic bounds = ship.getShipAABB();
+        ShipBounds bounds = getShipBounds(ship);
         if (bounds == null) {
             return;
         }
@@ -408,12 +409,50 @@ public final class ShipCrashConsequences {
         return vector.normalize();
     }
 
-    private static Vector3d supportPoint(AABBic bounds, Vector3dc direction) {
+    private static Vector3d supportPoint(ShipBounds bounds, Vector3dc direction) {
         return new Vector3d(
                 direction.x() >= 0.0D ? bounds.maxX() + 0.5D : bounds.minX() + 0.5D,
                 direction.y() >= 0.0D ? bounds.maxY() + 0.5D : bounds.minY() + 0.5D,
                 direction.z() >= 0.0D ? bounds.maxZ() + 0.5D : bounds.minZ() + 0.5D
         );
+    }
+
+    private static ShipBounds getShipBounds(LoadedServerShip ship) {
+        try {
+            Object bounds = ship.getClass().getMethod("getShipAABB").invoke(ship);
+            if (bounds == null) {
+                return null;
+            }
+            return new ShipBounds(
+                    readBound(bounds, "minX"),
+                    readBound(bounds, "minY"),
+                    readBound(bounds, "minZ"),
+                    readBound(bounds, "maxX"),
+                    readBound(bounds, "maxY"),
+                    readBound(bounds, "maxZ")
+            );
+        } catch (ReflectiveOperationException | ClassCastException ex) {
+            return null;
+        }
+    }
+
+    private static double readBound(Object bounds, String accessor) throws ReflectiveOperationException {
+        Class<?> boundsClass = bounds.getClass();
+        try {
+            Object value = boundsClass.getMethod(accessor).invoke(bounds);
+            return ((Number) value).doubleValue();
+        } catch (NoSuchMethodException ignored) {
+            // Try bean-style getters and public fields for API/version compatibility.
+        }
+
+        String getter = "get" + Character.toUpperCase(accessor.charAt(0)) + accessor.substring(1);
+        try {
+            Object value = boundsClass.getMethod(getter).invoke(bounds);
+            return ((Number) value).doubleValue();
+        } catch (NoSuchMethodException ignored) {
+            Object value = boundsClass.getField(accessor).get(bounds);
+            return ((Number) value).doubleValue();
+        }
     }
 
     private static double lerp(double start, double end, double delta) {
@@ -422,10 +461,10 @@ public final class ShipCrashConsequences {
 
     private static double clamp01(double value) {
         return Math.max(0.0D, Math.min(1.0D, value));
+    }
 
-        private static void playAt(ServerLevel level, Vector3d pos, SoundEvent sound, float volume, float pitch) {
-            level.playSound(null, pos.x(), pos.y(), pos.z(), sound, SoundSource.BLOCKS, volume, pitch);
-        }
+    private static void playAt(ServerLevel level, Vector3d pos, SoundEvent sound, float volume, float pitch) {
+        level.playSound(null, pos.x(), pos.y(), pos.z(), sound, SoundSource.BLOCKS, volume, pitch);
     }
 
     private record ImpactProfile(
@@ -438,5 +477,15 @@ public final class ShipCrashConsequences {
     }
 
     private record PendingExplosion(String dimension, long triggerTick, Vector3d worldPosition, float power) {
+    }
+
+    private record ShipBounds(
+            double minX,
+            double minY,
+            double minZ,
+            double maxX,
+            double maxY,
+            double maxZ
+    ) {
     }
 }

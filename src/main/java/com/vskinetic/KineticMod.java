@@ -1,6 +1,7 @@
 package com.vskinetic;
 
 import com.vskinetic.ship.ShipCommands;
+import com.vskinetic.ship.ShipCollisionSignals;
 import com.vskinetic.ship.ShipRuntimeEvents;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -35,7 +36,7 @@ public class KineticMod
 
     private void commonSetup(final FMLCommonSetupEvent event)
     {
-
+        event.enqueueWork(ShipCollisionSignals::registerVsCollisionEvents);
     }
 
     @SubscribeEvent

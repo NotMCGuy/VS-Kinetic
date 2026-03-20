@@ -35,13 +35,14 @@ public final class ShipRuntimeEvents {
         }
 
         crashConsequences.processPendingExplosions(level);
+        Set<Long> collisionSignals = ShipCollisionSignals.drainSignalsForDimension(level.dimension().location().toString());
 
         for (LoadedServerShip ship : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
-            processShip(level, ship);
+            processShip(level, ship, collisionSignals);
         }
     }
 
-    private void processShip(ServerLevel level, LoadedServerShip ship) {
+    private void processShip(ServerLevel level, LoadedServerShip ship, Set<Long> collisionSignals) {
         long shipId = ship.getId();
         RuntimeShipState runtimeState = runtimeStateByShip.computeIfAbsent(shipId, ignored -> {
             ShipCrashHooks.onShipCreated(level.getServer(), shipId, null);
@@ -51,6 +52,7 @@ public final class ShipRuntimeEvents {
         Vec3 previousVelocity = runtimeState.lastVelocity;
         Vec3 velocity = toMinecraft(ship.getVelocity());
         boolean inferredCollision = inferCollision(runtimeState, velocity);
+        boolean hadCollisionSignal = inferredCollision || collisionSignals.contains(shipId);
 
         ShipCrashHooks.PhysicsSampleOutcome outcome = ShipCrashHooks.onShipPhysicsSampleDetailed(
                 level.getServer(),
@@ -58,7 +60,7 @@ public final class ShipRuntimeEvents {
                 level.getGameTime(),
                 velocity,
                 ship.getInertiaData().getShipMass(),
-                inferredCollision
+                hadCollisionSignal
         );
 
         runtimeState.lastVelocity = velocity;

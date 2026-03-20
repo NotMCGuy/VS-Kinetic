@@ -21,12 +21,15 @@ public class CrashPhysicsEngine {
 
         double speed = velocity.length();
         double deltaV = velocity.subtract(state.lastVelocity).length();
+        double previousDownwardSpeed = Math.max(0.0D, -state.lastVelocity.y);
         double clampedMass = Math.max(1.0D, mass);
         double impactEnergy = 0.5D * clampedMass * deltaV * deltaV;
         double crashScore = score(speed, deltaV, impactEnergy);
 
         boolean collisionGate = !Config.requireCollisionSignal || collisionSignal;
-        boolean enoughSpeed = speed >= Config.minCrashSpeed;
+        boolean verticalCollisionImpact = collisionSignal
+                && previousDownwardSpeed >= Math.max(1.0D, Config.deckImpactVerticalSpeed * 0.5D);
+        boolean enoughSpeed = speed >= Config.minCrashSpeed || verticalCollisionImpact;
         boolean enoughImpulse = deltaV >= Config.minDeltaV || impactEnergy >= Config.minImpactEnergy;
         boolean cooldownReady = gameTime >= state.cooldownUntilTick;
 
