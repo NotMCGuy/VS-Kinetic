@@ -64,6 +64,8 @@ public final class ShipCrashConsequences {
     Vector3d soundPos = ship.getTransform().getShipToWorld()
         .transformPosition(profile.impactPoint, new Vector3d());
 
+    applyWallBreachEffects(level, ship, profile, result, previousVelocity);
+
     // Front crumple: nose hits an obstacle — only for non-belly impacts
     if (!profile.bellyScrape
         && (result.severity() == CrashPhysicsEngine.CrashSeverity.HARD
@@ -377,6 +379,95 @@ public final class ShipCrashConsequences {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    private void applyWallBreachEffects(
+            ServerLevel level,
+            LoadedServerShip ship,
+            ImpactProfile profile,
+            CrashPhysicsEngine.CrashResult result,
+            Vec3 previousVelocity
+    ) {
+        double horizontalSpeed = Math.sqrt(previousVelocity.x * previousVelocity.x + previousVelocity.z * previousVelocity.z);
+        if (horizontalSpeed < 2.0D) {
+            return;
+        }
+
+        double mass = Math.max(1.0D, ship.getInertiaData().getShipMass());
+        double momentum = mass * horizontalSpeed;
+        double minimumMomentum = result.severity() == CrashPhysicsEngine.CrashSeverity.SCRAPE ? 1800.0D : 1200.0D;
+        if (momentum < minimumMomentum) {
+            return;
+        }
+
+        Vector3d forward = new Vector3d(profile.travelDirLocal.x(), 0.0D, profile.travelDirLocal.z());
+        if (forward.lengthSquared() < 1.0E-6D) {
+            return;
+        }
+        forward.normalize();
+
+        Vector3d side = new Vector3d(0.0D, 1.0D, 0.0D).cross(forward, new Vector3d());
+        if (side.lengthSquared() < 1.0E-6D) {
+            side.set(1.0D, 0.0D, 0.0D);
+        } else {
+            side.normalize();
+        }
+
+        double severityScale = switch (result.severity()) {
+            case SCRAPE -> 0.85D;
+            case HARD -> 1.25D;
+            case CATASTROPHIC -> 1.8D;
+            case NONE -> 0.0D;
+        };
+        if (severityScale <= 0.0D) {
+            return;
+        }
+
+        ShipBounds bounds = getShipBounds(ship);
+        double vehicleHeight = bounds != null ? Math.max(1.0D, bounds.maxY() - bounds.minY()) : 3.0D;
+        int halfWidth = (int) Math.max(1, Math.min(Math.ceil(vehicleHeight * 0.6D), 4));
+        int halfHeight = (int) Math.max(1, Math.min(Math.ceil(vehicleHeight * 0.5D), 4));
+        int depth = (int) Math.max(1, Math.min(
+                Math.ceil((horizontalSpeed * 0.55D + Math.log10(mass + 1.0D) * 1.35D) * severityScale * Config.terrainBreachFactor),
+                12
+        ));
+
+        for (int d = 0; d <= depth; d++) {
+            for (int w = -halfWidth; w <= halfWidth; w++) {
+                for (int h = -halfHeight; h <= halfHeight; h++) {
+                    double ellipse = (w * w / (double) (halfWidth * halfWidth))
+                            + (h * h / (double) (halfHeight * halfHeight));
+                    if (ellipse > 1.20D) {
+                        continue;
+                    }
+
+                    Vector3d sampleLocal = new Vector3d(profile.impactPoint)
+                            .add(new Vector3d(forward).mul(d))
+                            .add(new Vector3d(side).mul(w))
+                            .add(0.0D, h, 0.0D);
+                    BlockPos pos = localToWorldPos(ship, sampleLocal);
+                    if (pos.getY() < level.getMinBuildHeight()) {
+                        continue;
+                    }
+
+                    BlockState state = level.getBlockState(pos);
+                    if (state.isAir() || state.getDestroySpeed(level, pos) < 0.0F) {
+                        continue;
+                    }
+
+                    double breakPower = momentum / (350.0D + d * 115.0D);
+                    if (result.severity() == CrashPhysicsEngine.CrashSeverity.SCRAPE) {
+                        breakPower *= 0.7D;
+                    }
+                    float hardness = state.getDestroySpeed(level, pos);
+                    if (hardness > 0.0F && breakPower < hardness * 3.2D && level.random.nextFloat() < 0.75F) {
+                        continue;
+                    }
+
+                    level.destroyBlock(pos, false);
                 }
             }
         }

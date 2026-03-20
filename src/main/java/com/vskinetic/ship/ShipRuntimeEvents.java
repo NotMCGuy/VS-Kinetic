@@ -4,8 +4,10 @@ import com.vskinetic.Config;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
@@ -68,6 +70,7 @@ public final class ShipRuntimeEvents {
         ShipBindingRecord record = outcome.record();
         CrashPhysicsEngine.CrashResult result = outcome.result();
         if (result.crash()) {
+            applyWingClipDamage(level, ship, previousVelocity, result, runtimeState);
             crashConsequences.applyCrashEffects(level, ship, result, previousVelocity, velocity);
             notifyCrash(level, ship, record, result);
             armPostCrashDamping(runtimeState, result);
@@ -75,8 +78,49 @@ public final class ShipRuntimeEvents {
         }
 
         applyPostCrashDamping(ship, runtimeState);
+        applyWingInstability(ship, runtimeState);
         applyIntegrityDrag(ship, record);
         warnCriticalIntegrity(level, ship, record, runtimeState);
+    }
+
+    @SubscribeEvent
+    public void onBlockBreak(BlockEvent.BreakEvent event) {
+        if (!(event.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
+
+        LoadedServerShip ship = VSGameUtilsKt.getLoadedShipManagingPos(level, event.getPos());
+        if (ship == null) {
+            return;
+        }
+
+        RuntimeShipState runtimeState = runtimeStateByShip.computeIfAbsent(ship.getId(), ignored -> new RuntimeShipState());
+        ShipBounds bounds = getShipBounds(ship);
+        if (bounds == null) {
+            return;
+        }
+
+        Vector3d local = ship.getTransform().getWorldToShip().transformPosition(
+                new Vector3d(event.getPos().getX() + 0.5D, event.getPos().getY() + 0.5D, event.getPos().getZ() + 0.5D),
+                new Vector3d()
+        );
+        double centerX = (bounds.minX() + bounds.maxX()) * 0.5D;
+        double halfSpan = Math.max(1.0D, (bounds.maxX() - bounds.minX()) * 0.5D);
+        double lateral = (local.x() - centerX) / halfSpan;
+        if (Math.abs(lateral) < 0.58D) {
+            return;
+        }
+
+        double centerY = (bounds.minY() + bounds.maxY()) * 0.5D;
+        if (local.y() < centerY - 1.5D) {
+            return;
+        }
+
+        if (lateral >= 0.0D) {
+            runtimeState.rightWingDamage = Math.min(100.0D, runtimeState.rightWingDamage + 2.2D);
+        } else {
+            runtimeState.leftWingDamage = Math.min(100.0D, runtimeState.leftWingDamage + 2.2D);
+        }
     }
 
     private boolean inferCollision(RuntimeShipState runtimeState, Vec3 velocity) {
@@ -158,6 +202,163 @@ public final class ShipRuntimeEvents {
         applyBrakingForce(ship, runtimeState.postCrashDamping);
         runtimeState.postCrashDampingTicks--;
         runtimeState.postCrashDamping *= 0.90D;
+    }
+
+    private void applyWingClipDamage(
+            ServerLevel level,
+            LoadedServerShip ship,
+            Vec3 previousVelocity,
+            CrashPhysicsEngine.CrashResult result,
+            RuntimeShipState runtimeState
+    ) {
+        if (previousVelocity == null || previousVelocity.lengthSqr() < 1.0E-4D) {
+            return;
+        }
+        ShipBounds bounds = getShipBounds(ship);
+        if (bounds == null) {
+            return;
+        }
+
+        Vector3d velLocal = ship.getTransform().getWorldToShip().transformDirection(
+                new Vector3d(previousVelocity.x, previousVelocity.y, previousVelocity.z),
+                new Vector3d()
+        );
+        double horizontalSpeed = Math.sqrt(previousVelocity.x * previousVelocity.x + previousVelocity.z * previousVelocity.z);
+        double downwardSpeed = Math.max(0.0D, -previousVelocity.y);
+        if (horizontalSpeed < 3.0D && downwardSpeed < 3.5D) {
+            return;
+        }
+
+        double sideWeight = Math.abs(velLocal.x()) / Math.max(0.001D, Math.sqrt(velLocal.x() * velLocal.x() + velLocal.z() * velLocal.z()));
+        if (sideWeight < 0.25D && downwardSpeed < Config.deckImpactVerticalSpeed * 0.85D) {
+            return;
+        }
+
+        boolean hitRightWing = velLocal.x() >= 0.0D;
+        double wingDamage = switch (result.severity()) {
+            case SCRAPE -> 10.0D;
+            case HARD -> 22.0D;
+            case CATASTROPHIC -> 36.0D;
+            case NONE -> 0.0D;
+        };
+        wingDamage *= (0.8D + sideWeight * 0.8D);
+        if (downwardSpeed > Config.deckImpactVerticalSpeed) {
+            wingDamage *= 1.2D;
+        }
+
+        if (hitRightWing) {
+            runtimeState.rightWingDamage = Math.min(100.0D, runtimeState.rightWingDamage + wingDamage);
+            severWingSection(level, ship, bounds, true, result);
+        } else {
+            runtimeState.leftWingDamage = Math.min(100.0D, runtimeState.leftWingDamage + wingDamage);
+            severWingSection(level, ship, bounds, false, result);
+        }
+    }
+
+    private void applyWingInstability(LoadedServerShip ship, RuntimeShipState runtimeState) {
+        double left = runtimeState.leftWingDamage;
+        double right = runtimeState.rightWingDamage;
+        if (left < 1.0D && right < 1.0D) {
+            return;
+        }
+
+        Vector3dc velocity = ship.getVelocity();
+        double speedSq = velocity.lengthSquared();
+        if (speedSq < 0.15D) {
+            return;
+        }
+
+        Vector3d rightAxis = ship.getTransform().getShipToWorld()
+                .transformDirection(new Vector3d(1.0D, 0.0D, 0.0D), new Vector3d());
+        if (rightAxis.lengthSquared() < 1.0E-6D) {
+            return;
+        }
+        rightAxis.normalize();
+
+        Vector3d velocityDir = new Vector3d(velocity).normalize();
+        double mass = Math.max(1.0D, ship.getInertiaData().getShipMass());
+        double imbalance = (right - left) / 100.0D;
+        double damageLevel = Math.max(left, right) / 100.0D;
+        if (Math.abs(imbalance) < 0.02D && damageLevel < 0.35D) {
+            return;
+        }
+
+        double base = mass * (0.12D + damageLevel * 0.42D);
+        Vector3d force = new Vector3d(velocityDir).mul(-base * (0.6D + Math.abs(imbalance)));
+        force.add(0.0D, -base * 0.42D * (0.3D + damageLevel), 0.0D);
+
+        Vector3d center = new Vector3d(ship.getTransform().getPositionInWorld());
+        Vector3d offsetDir = new Vector3d(rightAxis).mul(Math.signum(imbalance == 0.0D ? (right - left) : imbalance));
+        Vector3d applyPos = center.add(offsetDir.mul(3.5D), new Vector3d());
+        ValkyrienSkiesMod.getOrCreateGTPA(ship.getChunkClaimDimension()).applyWorldForce(ship.getId(), force, applyPos);
+
+        // Ongoing aerodynamic load slowly worsens a damaged wing at speed.
+        double speed = Math.sqrt(speedSq);
+        double progressive = (speed / 45.0D) * damageLevel * 0.35D;
+        if (imbalance >= 0.0D) {
+            runtimeState.rightWingDamage = Math.min(100.0D, runtimeState.rightWingDamage + progressive);
+        } else {
+            runtimeState.leftWingDamage = Math.min(100.0D, runtimeState.leftWingDamage + progressive);
+        }
+    }
+
+    private void severWingSection(
+            ServerLevel level,
+            LoadedServerShip ship,
+            ShipBounds bounds,
+            boolean rightWing,
+            CrashPhysicsEngine.CrashResult result
+    ) {
+        double halfSpan = Math.max(1.0D, (bounds.maxX() - bounds.minX()) * 0.5D);
+        double centerX = (bounds.minX() + bounds.maxX()) * 0.5D;
+        double centerY = (bounds.minY() + bounds.maxY()) * 0.5D;
+        double centerZ = (bounds.minZ() + bounds.maxZ()) * 0.5D;
+        double wingX = rightWing ? centerX + halfSpan * 0.88D : centerX - halfSpan * 0.88D;
+
+        int sliceDepth = switch (result.severity()) {
+            case SCRAPE -> 2;
+            case HARD -> 3;
+            case CATASTROPHIC -> 5;
+            case NONE -> 0;
+        };
+        int halfHeight = switch (result.severity()) {
+            case SCRAPE -> 1;
+            case HARD -> 2;
+            case CATASTROPHIC -> 3;
+            case NONE -> 0;
+        };
+        int halfChord = switch (result.severity()) {
+            case SCRAPE -> 2;
+            case HARD -> 3;
+            case CATASTROPHIC -> 4;
+            case NONE -> 0;
+        };
+        if (sliceDepth <= 0) {
+            return;
+        }
+
+        int xDir = rightWing ? -1 : 1;
+        for (int dx = 0; dx <= sliceDepth; dx++) {
+            for (int dy = -halfHeight; dy <= halfHeight; dy++) {
+                for (int dz = -halfChord; dz <= halfChord; dz++) {
+                    Vector3d local = new Vector3d(
+                            wingX + dx * xDir,
+                            centerY + dy,
+                            centerZ + dz
+                    );
+                    BlockPos pos = localToWorldPos(ship, local);
+                    if (pos.getY() < level.getMinBuildHeight()) {
+                        continue;
+                    }
+                    if (level.getBlockState(pos).isAir()) {
+                        continue;
+                    }
+                    if (level.random.nextFloat() < 0.84F) {
+                        level.destroyBlock(pos, false);
+                    }
+                }
+            }
+        }
     }
 
     private void applyIntegrityDrag(LoadedServerShip ship, ShipBindingRecord record) {
@@ -269,10 +470,64 @@ public final class ShipRuntimeEvents {
         };
     }
 
+    private static BlockPos localToWorldPos(LoadedServerShip ship, Vector3d localPos) {
+        Vector3d world = ship.getTransform().getShipToWorld().transformPosition(localPos, new Vector3d());
+        return BlockPos.containing(world.x(), world.y(), world.z());
+    }
+
+    private static ShipBounds getShipBounds(LoadedServerShip ship) {
+        try {
+            Object bounds = ship.getClass().getMethod("getShipAABB").invoke(ship);
+            if (bounds == null) {
+                return null;
+            }
+            return new ShipBounds(
+                    readBound(bounds, "minX"),
+                    readBound(bounds, "minY"),
+                    readBound(bounds, "minZ"),
+                    readBound(bounds, "maxX"),
+                    readBound(bounds, "maxY"),
+                    readBound(bounds, "maxZ")
+            );
+        } catch (ReflectiveOperationException | ClassCastException ex) {
+            return null;
+        }
+    }
+
+    private static double readBound(Object bounds, String accessor) throws ReflectiveOperationException {
+        Class<?> boundsClass = bounds.getClass();
+        try {
+            Object value = boundsClass.getMethod(accessor).invoke(bounds);
+            return ((Number) value).doubleValue();
+        } catch (NoSuchMethodException ignored) {
+        }
+
+        String getter = "get" + Character.toUpperCase(accessor.charAt(0)) + accessor.substring(1);
+        try {
+            Object value = boundsClass.getMethod(getter).invoke(bounds);
+            return ((Number) value).doubleValue();
+        } catch (NoSuchMethodException ignored) {
+            Object value = boundsClass.getField(accessor).get(bounds);
+            return ((Number) value).doubleValue();
+        }
+    }
+
     private static final class RuntimeShipState {
         private Vec3 lastVelocity;
         private long lastCriticalWarningTick = Long.MIN_VALUE;
         private int postCrashDampingTicks;
         private double postCrashDamping;
+        private double leftWingDamage;
+        private double rightWingDamage;
+    }
+
+    private record ShipBounds(
+            double minX,
+            double minY,
+            double minZ,
+            double maxX,
+            double maxY,
+            double maxZ
+    ) {
     }
 }
