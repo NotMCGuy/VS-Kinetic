@@ -74,10 +74,12 @@ public final class ShipRuntimeEvents {
             crashConsequences.applyCrashEffects(level, ship, result, previousVelocity, velocity);
             notifyCrash(level, ship, record, result);
             armPostCrashDamping(runtimeState, result);
+            armGroundSettling(runtimeState, previousVelocity, result);
             applyCrashBraking(ship, result);
         }
 
         applyPostCrashDamping(ship, runtimeState);
+        applyGroundSettling(ship, runtimeState);
         applyWingInstability(ship, runtimeState);
         applyIntegrityDrag(ship, record);
         warnCriticalIntegrity(level, ship, record, runtimeState);
@@ -202,6 +204,50 @@ public final class ShipRuntimeEvents {
         applyBrakingForce(ship, runtimeState.postCrashDamping);
         runtimeState.postCrashDampingTicks--;
         runtimeState.postCrashDamping *= 0.90D;
+    }
+
+    private void armGroundSettling(
+            RuntimeShipState runtimeState,
+            Vec3 previousVelocity,
+            CrashPhysicsEngine.CrashResult result
+    ) {
+        if (previousVelocity == null) {
+            return;
+        }
+        double downwardSpeed = Math.max(0.0D, -previousVelocity.y);
+        if (downwardSpeed < 2.2D) {
+            return;
+        }
+
+        int ticks = switch (result.severity()) {
+            case SCRAPE -> 8;
+            case HARD -> 14;
+            case CATASTROPHIC -> 22;
+            case NONE -> 0;
+        };
+        double strength = switch (result.severity()) {
+            case SCRAPE -> 0.30D;
+            case HARD -> 0.55D;
+            case CATASTROPHIC -> 0.95D;
+            case NONE -> 0.0D;
+        };
+        runtimeState.groundSettleTicks = Math.max(runtimeState.groundSettleTicks, ticks);
+        runtimeState.groundSettleStrength = Math.max(
+                runtimeState.groundSettleStrength,
+                strength * (1.0D + Math.min(1.25D, downwardSpeed / 8.0D)) * Config.crashBounceDamping
+        );
+    }
+
+    private void applyGroundSettling(LoadedServerShip ship, RuntimeShipState runtimeState) {
+        if (runtimeState.groundSettleTicks <= 0 || runtimeState.groundSettleStrength <= 0.0D) {
+            return;
+        }
+        double mass = Math.max(1.0D, ship.getInertiaData().getShipMass());
+        Vector3d force = new Vector3d(0.0D, -mass * runtimeState.groundSettleStrength, 0.0D);
+        Vector3d center = new Vector3d(ship.getTransform().getPositionInWorld());
+        ValkyrienSkiesMod.getOrCreateGTPA(ship.getChunkClaimDimension()).applyWorldForce(ship.getId(), force, center);
+        runtimeState.groundSettleTicks--;
+        runtimeState.groundSettleStrength *= 0.88D;
     }
 
     private void applyWingClipDamage(
@@ -519,6 +565,8 @@ public final class ShipRuntimeEvents {
         private double postCrashDamping;
         private double leftWingDamage;
         private double rightWingDamage;
+        private int groundSettleTicks;
+        private double groundSettleStrength;
     }
 
     private record ShipBounds(

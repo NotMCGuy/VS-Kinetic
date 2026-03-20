@@ -65,6 +65,9 @@ public final class ShipCrashConsequences {
         .transformPosition(profile.impactPoint, new Vector3d());
 
     applyWallBreachEffects(level, ship, profile, result, previousVelocity);
+    if (profile.deckImpact) {
+        excavateUnderbodyCrater(level, ship, result, previousVelocity);
+    }
 
     // Front crumple: nose hits an obstacle — only for non-belly impacts
     if (!profile.bellyScrape
@@ -427,12 +430,15 @@ public final class ShipCrashConsequences {
         }
 
         ShipBounds bounds = getShipBounds(ship);
-        double vehicleHeight = bounds != null ? Math.max(1.0D, bounds.maxY() - bounds.minY()) : 3.0D;
-        int halfWidth = (int) Math.max(1, Math.min(Math.ceil(vehicleHeight * 0.6D), 4));
-        int halfHeight = (int) Math.max(1, Math.min(Math.ceil(vehicleHeight * 0.5D), 4));
+        double sizeX = bounds != null ? Math.max(1.0D, bounds.maxX() - bounds.minX()) : 4.0D;
+        double sizeY = bounds != null ? Math.max(1.0D, bounds.maxY() - bounds.minY()) : 3.0D;
+        double sizeZ = bounds != null ? Math.max(1.0D, bounds.maxZ() - bounds.minZ()) : 6.0D;
+        double lateralSpan = Math.abs(side.x()) * sizeX + Math.abs(side.z()) * sizeZ;
+        int halfWidth = (int) Math.max(1, Math.min(Math.ceil(lateralSpan * 0.5D), 14));
+        int halfHeight = (int) Math.max(1, Math.min(Math.ceil(sizeY * 0.5D), 10));
         int depth = (int) Math.max(1, Math.min(
                 Math.ceil((horizontalSpeed * 0.55D + Math.log10(mass + 1.0D) * 1.35D) * severityScale * Config.terrainBreachFactor),
-                12
+                16
         ));
 
         for (int d = 0; d <= depth; d++) {
@@ -463,10 +469,64 @@ public final class ShipCrashConsequences {
                         breakPower *= 0.7D;
                     }
                     float hardness = state.getDestroySpeed(level, pos);
-                    if (hardness > 0.0F && breakPower < hardness * 3.2D && level.random.nextFloat() < 0.75F) {
+                    if (hardness > 0.0F && breakPower < hardness * 2.4D && level.random.nextFloat() < 0.45F) {
                         continue;
                     }
 
+                    level.destroyBlock(pos, false);
+                }
+            }
+        }
+    }
+
+    private void excavateUnderbodyCrater(
+            ServerLevel level,
+            LoadedServerShip ship,
+            CrashPhysicsEngine.CrashResult result,
+            Vec3 previousVelocity
+    ) {
+        ShipBounds bounds = getShipBounds(ship);
+        if (bounds == null) {
+            return;
+        }
+
+        double downwardSpeed = Math.max(0.0D, -previousVelocity.y);
+        if (downwardSpeed < 2.5D) {
+            return;
+        }
+
+        double sizeX = Math.max(1.0D, bounds.maxX() - bounds.minX());
+        double sizeZ = Math.max(1.0D, bounds.maxZ() - bounds.minZ());
+        int halfX = (int) Math.max(1, Math.min(Math.ceil(sizeX * 0.5D), 12));
+        int halfZ = (int) Math.max(1, Math.min(Math.ceil(sizeZ * 0.5D), 12));
+        int depth = (int) Math.max(1, Math.min(
+                Math.ceil((0.6D + downwardSpeed * 0.35D) * Config.terrainBreachFactor
+                        + (result.severity() == CrashPhysicsEngine.CrashSeverity.CATASTROPHIC ? 2.0D : 0.0D)),
+                7
+        ));
+
+        double centerX = (bounds.minX() + bounds.maxX()) * 0.5D;
+        double centerZ = (bounds.minZ() + bounds.maxZ()) * 0.5D;
+        double baseY = bounds.minY() - 0.25D;
+
+        for (int dx = -halfX; dx <= halfX; dx++) {
+            for (int dz = -halfZ; dz <= halfZ; dz++) {
+                double ellipse = (dx * dx / (double) (halfX * halfX))
+                        + (dz * dz / (double) (halfZ * halfZ));
+                if (ellipse > 1.0D) {
+                    continue;
+                }
+                int localDepth = Math.max(1, (int) Math.ceil(depth * (1.0D - ellipse * 0.55D)));
+                for (int dy = 0; dy <= localDepth; dy++) {
+                    Vector3d local = new Vector3d(centerX + dx, baseY - dy, centerZ + dz);
+                    BlockPos pos = localToWorldPos(ship, local);
+                    if (pos.getY() < level.getMinBuildHeight()) {
+                        continue;
+                    }
+                    BlockState state = level.getBlockState(pos);
+                    if (state.isAir() || state.getDestroySpeed(level, pos) < 0.0F) {
+                        continue;
+                    }
                     level.destroyBlock(pos, false);
                 }
             }
