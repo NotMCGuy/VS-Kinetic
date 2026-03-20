@@ -70,9 +70,11 @@ public final class ShipRuntimeEvents {
         if (result.crash()) {
             crashConsequences.applyCrashEffects(level, ship, result, previousVelocity, velocity);
             notifyCrash(level, ship, record, result);
+            armPostCrashDamping(runtimeState, result);
             applyCrashBraking(ship, result);
         }
 
+        applyPostCrashDamping(ship, runtimeState);
         applyIntegrityDrag(ship, record);
         warnCriticalIntegrity(level, ship, record, runtimeState);
     }
@@ -130,6 +132,32 @@ public final class ShipRuntimeEvents {
             case NONE -> 0.0D;
         };
         applyBrakingForce(ship, extraDeceleration);
+    }
+
+    private void armPostCrashDamping(RuntimeShipState runtimeState, CrashPhysicsEngine.CrashResult result) {
+        int ticks = switch (result.severity()) {
+            case SCRAPE -> 10;
+            case HARD -> 20;
+            case CATASTROPHIC -> 34;
+            case NONE -> 0;
+        };
+        double deceleration = switch (result.severity()) {
+            case SCRAPE -> 0.80D;
+            case HARD -> 1.80D;
+            case CATASTROPHIC -> 3.00D;
+            case NONE -> 0.0D;
+        };
+        runtimeState.postCrashDampingTicks = Math.max(runtimeState.postCrashDampingTicks, ticks);
+        runtimeState.postCrashDamping = Math.max(runtimeState.postCrashDamping, deceleration * Config.crashBounceDamping);
+    }
+
+    private void applyPostCrashDamping(LoadedServerShip ship, RuntimeShipState runtimeState) {
+        if (runtimeState.postCrashDampingTicks <= 0 || runtimeState.postCrashDamping <= 0.0D) {
+            return;
+        }
+        applyBrakingForce(ship, runtimeState.postCrashDamping);
+        runtimeState.postCrashDampingTicks--;
+        runtimeState.postCrashDamping *= 0.90D;
     }
 
     private void applyIntegrityDrag(LoadedServerShip ship, ShipBindingRecord record) {
@@ -244,5 +272,7 @@ public final class ShipRuntimeEvents {
     private static final class RuntimeShipState {
         private Vec3 lastVelocity;
         private long lastCriticalWarningTick = Long.MIN_VALUE;
+        private int postCrashDampingTicks;
+        private double postCrashDamping;
     }
 }

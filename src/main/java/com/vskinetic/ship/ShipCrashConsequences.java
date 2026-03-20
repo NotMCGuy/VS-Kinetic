@@ -68,7 +68,7 @@ public final class ShipCrashConsequences {
     if (!profile.bellyScrape
         && (result.severity() == CrashPhysicsEngine.CrashSeverity.HARD
             || result.severity() == CrashPhysicsEngine.CrashSeverity.CATASTROPHIC)) {
-        crumpleFront(level, profile, result);
+        crumpleFront(level, ship, profile, result);
         // Thud + structural groan scaled to severity
         playAt(level, soundPos, SoundEvents.ANVIL_LAND, catastrophic ? 1.5f : 1.2f, catastrophic ? 0.5f : 0.8f);
         playAt(level, soundPos,
@@ -184,8 +184,14 @@ public final class ShipCrashConsequences {
         return new ImpactProfile(impactPoint, travelDirLocal, impulseDirWorld, deckImpact, bellyScrape);
     }
 
-    private void crumpleFront(ServerLevel level, ImpactProfile profile, CrashPhysicsEngine.CrashResult result) {
+    private void crumpleFront(
+            ServerLevel level,
+            LoadedServerShip ship,
+            ImpactProfile profile,
+            CrashPhysicsEngine.CrashResult result
+    ) {
         double severityScale = switch (result.severity()) {
+            case SCRAPE -> 0.70D;
             case HARD -> 1.0D;
             case CATASTROPHIC -> 1.55D;
             default -> 0.0D;
@@ -194,8 +200,8 @@ public final class ShipCrashConsequences {
             return;
         }
 
-        double depth = Config.frontCrumpleDepth * severityScale;
-        double radius = Config.frontCrumpleRadius * severityScale;
+        double depth = Config.frontCrumpleDepth * severityScale * Config.terrainBreachFactor;
+        double radius = Config.frontCrumpleRadius * severityScale * Math.sqrt(Math.max(0.0D, Config.terrainBreachFactor));
         Vector3d backward = new Vector3d(profile.travelDirLocal).negate().normalize();
 
         BlockPos center = BlockPos.containing(profile.impactPoint.x(), profile.impactPoint.y(), profile.impactPoint.z());
@@ -218,8 +224,9 @@ public final class ShipCrashConsequences {
                         continue;
                     }
 
-                    BlockState state = level.getBlockState(pos);
-                    if (state.isAir() || state.getDestroySpeed(level, pos) < 0.0F) {
+                    BlockPos worldPos = localToWorldPos(ship, sample);
+                    BlockState state = level.getBlockState(worldPos);
+                    if (state.isAir() || state.getDestroySpeed(level, worldPos) < 0.0F) {
                         continue;
                     }
 
@@ -229,7 +236,7 @@ public final class ShipCrashConsequences {
                         continue;
                     }
 
-                    level.destroyBlock(pos, false);
+                    level.destroyBlock(worldPos, false);
                 }
             }
         }
@@ -265,7 +272,7 @@ public final class ShipCrashConsequences {
             perp.normalize();
         }
 
-        double stripLength = Math.min(horizontalSpeed * Config.bellyScrapeBlocksPerMps, 16.0D);
+        double stripLength = Math.min(horizontalSpeed * Config.bellyScrapeBlocksPerMps * Config.terrainBreachFactor, 24.0D);
         double centerX = (bounds.minX() + bounds.maxX()) / 2.0D;
         double centerZ = (bounds.minZ() + bounds.maxZ()) / 2.0D;
         double bottomY = bounds.minY();
@@ -284,7 +291,7 @@ public final class ShipCrashConsequences {
                     Vector3d sample = new Vector3d(sCenter)
                             .add(new Vector3d(perp).mul(w))
                             .add(0.0D, dy, 0.0D);
-                    BlockPos pos = BlockPos.containing(sample.x(), sample.y(), sample.z());
+                    BlockPos pos = localToWorldPos(ship, sample);
                     if (pos.getY() < level.getMinBuildHeight()) {
                         continue;
                     }
@@ -341,8 +348,8 @@ public final class ShipCrashConsequences {
         double centerZ = (bounds.minZ() + bounds.maxZ()) / 2.0D;
         double bottomY = bounds.minY();
 
-        int halfSizeX = (int) Math.max(1, Math.min(Math.ceil((bounds.maxX() - bounds.minX()) * 0.35D), 6));
-        int halfSizeZ = (int) Math.max(1, Math.min(Math.ceil((bounds.maxZ() - bounds.minZ()) * 0.35D), 6));
+        int halfSizeX = (int) Math.max(1, Math.min(Math.ceil((bounds.maxX() - bounds.minX()) * 0.35D * Config.terrainBreachFactor), 8));
+        int halfSizeZ = (int) Math.max(1, Math.min(Math.ceil((bounds.maxZ() - bounds.minZ()) * 0.35D * Config.terrainBreachFactor), 8));
 
         for (int dx = -halfSizeX; dx <= halfSizeX; dx++) {
             for (int dz = -halfSizeZ; dz <= halfSizeZ; dz++) {
@@ -353,11 +360,7 @@ public final class ShipCrashConsequences {
                     continue;
                 }
                 for (int dy = 0; dy <= 2; dy++) {
-                    BlockPos pos = BlockPos.containing(
-                            centerX + dx,
-                            bottomY + dy,
-                            centerZ + dz
-                    );
+                    BlockPos pos = localToWorldPos(ship, new Vector3d(centerX + dx, bottomY + dy, centerZ + dz));
                     if (pos.getY() < level.getMinBuildHeight()) {
                         continue;
                     }
@@ -386,10 +389,11 @@ public final class ShipCrashConsequences {
             CrashPhysicsEngine.CrashResult result
     ) {
         Vector3d worldPosition = ship.getTransform().getShipToWorld().transformPosition(profile.impactPoint, new Vector3d());
-        float power = (float) Math.max(
-                Config.catastrophicExplosionPower,
-                2.5D + Math.min(4.0D, result.damage() / 16.0D)
-        );
+        double sizeScale = estimateShipExplosionScale(ship);
+        float power = (float) Math.max(Config.catastrophicExplosionPower, Math.min(
+                16.0D,
+                Config.catastrophicExplosionPower * sizeScale + Math.min(4.5D, result.damage() / 14.0D)
+        ));
         pendingExplosions.add(new PendingExplosion(
                 level.dimension().location().toString(),
                 level.getGameTime() + Math.max(0, Config.catastrophicExplosionDelayTicks),
@@ -461,6 +465,27 @@ public final class ShipCrashConsequences {
 
     private static double clamp01(double value) {
         return Math.max(0.0D, Math.min(1.0D, value));
+    }
+
+    private static BlockPos localToWorldPos(LoadedServerShip ship, Vector3dc localPos) {
+        Vector3d world = ship.getTransform().getShipToWorld().transformPosition(localPos, new Vector3d());
+        return BlockPos.containing(world.x(), world.y(), world.z());
+    }
+
+    private static double estimateShipExplosionScale(LoadedServerShip ship) {
+        ShipBounds bounds = getShipBounds(ship);
+        if (bounds != null) {
+            double sizeX = Math.max(1.0D, bounds.maxX() - bounds.minX());
+            double sizeY = Math.max(1.0D, bounds.maxY() - bounds.minY());
+            double sizeZ = Math.max(1.0D, bounds.maxZ() - bounds.minZ());
+            double cubeRootVolume = Math.cbrt(sizeX * sizeY * sizeZ);
+            double normalized = clamp01((cubeRootVolume - 3.0D) / 16.0D);
+            return 1.0D + normalized * Config.shipSizeExplosionScale;
+        }
+
+        double mass = Math.max(1.0D, ship.getInertiaData().getShipMass());
+        double normalizedMass = clamp01((Math.log10(mass + 1.0D) - 2.5D) / 2.5D);
+        return 1.0D + normalizedMass * Config.shipSizeExplosionScale;
     }
 
     private static void playAt(ServerLevel level, Vector3d pos, SoundEvent sound, float volume, float pitch) {

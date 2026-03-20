@@ -95,6 +95,18 @@ public class Config
             .comment("Fraction of bottom-hull blocks destroyed during a gear collapse on HARD crashes (CATASTROPHIC always destroys all).")
             .defineInRange("gearCollapseDestructionFactor", 0.45D, 0.0D, 1.0D);
 
+    private static final ForgeConfigSpec.DoubleValue TERRAIN_BREACH_FACTOR = BUILDER
+            .comment("Multiplier for how aggressively crashes carve terrain/walls.")
+            .defineInRange("terrainBreachFactor", 1.20D, 0.0D, 5.0D);
+
+    private static final ForgeConfigSpec.DoubleValue SHIP_SIZE_EXPLOSION_SCALE = BUILDER
+            .comment("Extra catastrophic explosion scaling contributed by ship size.")
+            .defineInRange("shipSizeExplosionScale", 0.65D, 0.0D, 5.0D);
+
+    private static final ForgeConfigSpec.DoubleValue CRASH_BOUNCE_DAMPING = BUILDER
+            .comment("Post-impact damping multiplier to reduce bouncing.")
+            .defineInRange("crashBounceDamping", 1.75D, 0.0D, 20.0D);
+
     static final ForgeConfigSpec SPEC = BUILDER.build();
 
     public static double minCrashSpeed;
@@ -118,6 +130,9 @@ public class Config
     public static double catastrophicExplosionPower;
     public static double bellyScrapeBlocksPerMps;
     public static double gearCollapseDestructionFactor;
+    public static double terrainBreachFactor;
+    public static double shipSizeExplosionScale;
+    public static double crashBounceDamping;
 
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event)
@@ -143,5 +158,8 @@ public class Config
         catastrophicExplosionPower = CATASTROPHIC_EXPLOSION_POWER.get();
         bellyScrapeBlocksPerMps = BELLY_SCRAPE_BLOCKS_PER_MPS.get();
         gearCollapseDestructionFactor = GEAR_COLLAPSE_DESTRUCTION_FACTOR.get();
+        terrainBreachFactor = TERRAIN_BREACH_FACTOR.get();
+        shipSizeExplosionScale = SHIP_SIZE_EXPLOSION_SCALE.get();
+        crashBounceDamping = CRASH_BOUNCE_DAMPING.get();
     }
 }
