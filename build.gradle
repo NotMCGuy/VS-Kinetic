@@ -142,6 +142,9 @@ dependencies {
     implementation("org.valkyrienskies.core:internal:${vscore_version}") { transitive = false
         exclude group: 'org.joml', module: ''
     }
+    implementation("org.valkyrienskies.core:impl:${vscore_version}") { transitive = false
+        exclude group: 'org.joml', module: ''
+    }
 
     implementation 'thedarkcolour:kotlinforforge:4.11.0'
 }
