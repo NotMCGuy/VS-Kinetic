@@ -42,6 +42,7 @@ public class CrashPhysicsEngine {
         boolean crash = collisionGate && enoughSpeed && enoughImpulse && cooldownReady;
         CrashSeverity severity = crash ? classifySeverity(crashScore) : CrashSeverity.NONE;
         double damage = crash ? damageFor(severity, crashScore) : 0.0D;
+        double bounceDamping = dampingFor(severity);
         if (crash) {
             state.cooldownUntilTick = gameTime + Math.max(0, Config.crashCooldownTicks);
         }
@@ -50,7 +51,7 @@ public class CrashPhysicsEngine {
         state.lastVelocity = velocity;
 
         return crash
-                ? CrashResult.crash(speed, deltaV, impactEnergy, crashScore, severity, damage)
+                ? CrashResult.crash(speed, deltaV, impactEnergy, crashScore, severity, damage, bounceDamping)
                 : CrashResult.noCrash(speed, deltaV, impactEnergy);
     }
 
@@ -87,6 +88,15 @@ public class CrashPhysicsEngine {
         return Math.min(100.0D, scaled * Config.crashDamageMultiplier);
     }
 
+    private static double dampingFor(CrashSeverity severity) {
+        return switch (severity) {
+            case SCRAPE -> Config.scrapeExplosionDamping;
+            case HARD -> Config.hardExplosionDamping;
+            case CATASTROPHIC -> Config.catastrophicExplosionDamping;
+            case NONE -> 0.0D;
+        };
+    }
+
     private static class ShipMotionState {
         private boolean initialized;
         private long lastTick;
@@ -109,6 +119,7 @@ public class CrashPhysicsEngine {
         private final double crashScore;
         private final CrashSeverity severity;
         private final double damage;
+        private final double bounceDamping;
 
         private CrashResult(
                 boolean crash,
@@ -117,7 +128,8 @@ public class CrashPhysicsEngine {
                 double impactEnergy,
                 double crashScore,
                 CrashSeverity severity,
-                double damage
+                double damage,
+                double bounceDamping
         ) {
             this.crash = crash;
             this.speed = speed;
@@ -126,6 +138,7 @@ public class CrashPhysicsEngine {
             this.crashScore = crashScore;
             this.severity = severity;
             this.damage = damage;
+            this.bounceDamping = bounceDamping;
         }
 
         public static CrashResult crash(
@@ -134,13 +147,14 @@ public class CrashPhysicsEngine {
                 double impactEnergy,
                 double crashScore,
                 CrashSeverity severity,
-                double damage
+                double damage,
+                double bounceDamping
         ) {
-            return new CrashResult(true, speed, deltaV, impactEnergy, crashScore, severity, damage);
+            return new CrashResult(true, speed, deltaV, impactEnergy, crashScore, severity, damage, bounceDamping);
         }
 
         public static CrashResult noCrash(double speed, double deltaV, double impactEnergy) {
-            return new CrashResult(false, speed, deltaV, impactEnergy, 0.0D, CrashSeverity.NONE, 0.0D);
+            return new CrashResult(false, speed, deltaV, impactEnergy, 0.0D, CrashSeverity.NONE, 0.0D, 0.0D);
         }
 
         public boolean crash() {
@@ -169,6 +183,10 @@ public class CrashPhysicsEngine {
 
         public double damage() {
             return damage;
+        }
+
+        public double bounceDamping() {
+            return bounceDamping;
         }
     }
 }

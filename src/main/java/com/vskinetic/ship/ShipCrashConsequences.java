@@ -39,10 +39,11 @@ public final class ShipCrashConsequences {
             }
 
             double ex = pending.worldPosition.x(), ey = pending.worldPosition.y(), ez = pending.worldPosition.z();
-            level.sendParticles(ParticleTypes.LARGE_SMOKE, ex, ey, ez, 60, 3.0D, 2.0D, 3.0D, 0.06D);
-            level.sendParticles(ParticleTypes.EXPLOSION, ex, ey, ez, 10, 2.0D, 1.5D, 2.0D, 0.10D);
+            int smokeCount = (int) Math.max(40.0D, pending.power * 12.0D);
+            int explosionCount = (int) Math.max(6.0D, pending.power * 2.0D);
+            level.sendParticles(ParticleTypes.LARGE_SMOKE, ex, ey, ez, smokeCount, 3.0D, 2.0D, 3.0D, 0.06D);
+            level.sendParticles(ParticleTypes.EXPLOSION, ex, ey, ez, explosionCount, 2.0D, 1.5D, 2.0D, 0.10D);
             playAt(level, pending.worldPosition, SoundEvents.IRON_GOLEM_DEATH, 1.5f, 0.5f);
-            level.explode(null, null, null, ex, ey, ez, pending.power, true, Level.ExplosionInteraction.BLOCK);
             iterator.remove();
         }
     }

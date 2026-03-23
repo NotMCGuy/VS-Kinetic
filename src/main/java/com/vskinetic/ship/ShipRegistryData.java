@@ -86,15 +86,19 @@ public class ShipRegistryData extends SavedData {
     }
 
     public ShipBindingRecord applyCrash(long shipId, long gameTime, CrashPhysicsEngine.CrashResult result) {
+        return applyCrash(shipId, gameTime, result, ImpactPart.AUTO);
+    }
+
+    public ShipBindingRecord applyCrash(long shipId, long gameTime, CrashPhysicsEngine.CrashResult result, ImpactPart impactPart) {
         ShipBindingRecord record = getOrCreate(shipId);
-        record.applyCrash(result, gameTime);
+        record.applyCrash(result, gameTime, impactPart);
         setDirty();
         return record;
     }
 
     public ShipBindingRecord recoverShip(long shipId) {
         ShipBindingRecord record = getOrCreate(shipId);
-        record.recover(Config.recoveryIntegrityFloor);
+        record.recover(Config.recoveryIntegrityFloor, Config.partRecoveryFloor);
         setDirty();
         return record;
     }

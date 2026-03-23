@@ -123,25 +123,34 @@ public final class ShipCommands {
                                                                                             double mass = DoubleArgumentType.getDouble(ctx, "mass");
                                                                                             boolean collision = BoolArgumentType.getBool(ctx, "collision");
 
-                                                                                            ShipCrashHooks.PhysicsSampleOutcome outcome = ShipCrashHooks.onShipPhysicsSampleDetailed(
-                                                                                                    ctx.getSource().getServer(),
+                                                                                            return applyManualSample(
+                                                                                                    ctx.getSource(),
                                                                                                     shipId,
-                                                                                                    ctx.getSource().getServer().getTickCount(),
                                                                                                     new Vec3(vx, vy, vz),
                                                                                                     mass,
-                                                                                                    collision
+                                                                                                    collision,
+                                                                                                    ImpactPart.AUTO
                                                                                             );
-                                                                                            ShipBindingRecord record = outcome.record();
-                                                                                            CrashPhysicsEngine.CrashResult result = outcome.result();
+                                                                                        })
+                                                                                        .then(Commands.argument("impactPart", StringArgumentType.word())
+                                                                                                .executes(ctx -> {
+                                                                                                    long shipId = LongArgumentType.getLong(ctx, "shipId");
+                                                                                                    double vx = DoubleArgumentType.getDouble(ctx, "vx");
+                                                                                                    double vy = DoubleArgumentType.getDouble(ctx, "vy");
+                                                                                                    double vz = DoubleArgumentType.getDouble(ctx, "vz");
+                                                                                                    double mass = DoubleArgumentType.getDouble(ctx, "mass");
+                                                                                                    boolean collision = BoolArgumentType.getBool(ctx, "collision");
+                                                                                                    ImpactPart impactPart = ImpactPart.parseOrAuto(StringArgumentType.getString(ctx, "impactPart"));
 
-                                                                                            ctx.getSource().sendSuccess(() -> Component.literal("Physics sample applied | crashed="
-                                                                                                    + record.crashed()
-                                                                                                    + " | severity=" + result.severity().name().toLowerCase()
-                                                                                                    + " | damage=" + String.format("%.2f", result.damage())
-                                                                                                    + " | integrity=" + String.format("%.2f", record.structuralIntegrity())
-                                                                                                    + " | slug=" + record.slug()), true);
-                                                                                            return 1;
-                                                                                        })))))))))
+                                                                                                    return applyManualSample(
+                                                                                                            ctx.getSource(),
+                                                                                                            shipId,
+                                                                                                            new Vec3(vx, vy, vz),
+                                                                                                            mass,
+                                                                                                            collision,
+                                                                                                            impactPart
+                                                                                                    );
+                                                                                                })))))))))
                                 .then(Commands.literal("sample_here")
                                         .then(Commands.argument("collision", BoolArgumentType.bool())
                                                 .executes(ctx -> {
@@ -157,25 +166,39 @@ public final class ShipCommands {
                                                     }
 
                                                     Vector3dc velocity = ship.getVelocity();
-                                                    ShipCrashHooks.PhysicsSampleOutcome outcome = ShipCrashHooks.onShipPhysicsSampleDetailed(
-                                                            source.getServer(),
+                                                    return applyManualSample(
+                                                            source,
                                                             ship.getId(),
-                                                            source.getServer().getTickCount(),
                                                             new Vec3(velocity.x(), velocity.y(), velocity.z()),
                                                             ship.getInertiaData().getShipMass(),
-                                                            collision
+                                                            collision,
+                                                            ImpactPart.AUTO
                                                     );
+                                                })
+                                                .then(Commands.argument("impactPart", StringArgumentType.word())
+                                                        .executes(ctx -> {
+                                                            boolean collision = BoolArgumentType.getBool(ctx, "collision");
+                                                            CommandSourceStack source = ctx.getSource();
+                                                            ServerLevel level = source.getLevel();
+                                                            Vec3 pos = source.getPosition();
+                                                            ImpactPart impactPart = ImpactPart.parseOrAuto(StringArgumentType.getString(ctx, "impactPart"));
 
-                                                    ShipBindingRecord record = outcome.record();
-                                                    CrashPhysicsEngine.CrashResult result = outcome.result();
-                                                    source.sendSuccess(() -> Component.literal("VS sample applied | shipId=" + ship.getId()
-                                                            + " | crashed=" + record.crashed()
-                                                            + " | severity=" + result.severity().name().toLowerCase()
-                                                            + " | damage=" + String.format("%.2f", result.damage())
-                                                            + " | integrity=" + String.format("%.2f", record.structuralIntegrity())
-                                                            + " | slug=" + record.slug()), true);
-                                                    return 1;
-                                                })))
+                                                            LoadedServerShip ship = VSGameUtilsKt.getShipObjectManagingPos(level, pos.x, pos.y, pos.z);
+                                                            if (ship == null) {
+                                                                source.sendFailure(Component.literal("No Valkyrien Skies ship found at your current position."));
+                                                                return 0;
+                                                            }
+
+                                                            Vector3dc velocity = ship.getVelocity();
+                                                            return applyManualSample(
+                                                                    source,
+                                                                    ship.getId(),
+                                                                    new Vec3(velocity.x(), velocity.y(), velocity.z()),
+                                                                    ship.getInertiaData().getShipMass(),
+                                                                    collision,
+                                                                    impactPart
+                                                            );
+                                                        })))))
                         .then(Commands.literal("show")
                                 .then(Commands.argument("shipId", LongArgumentType.longArg(0L))
                                         .executes(ctx -> {
@@ -211,6 +234,38 @@ public final class ShipCommands {
         return ShipRegistryData.get(source.getServer());
     }
 
+    private static int applyManualSample(
+            CommandSourceStack source,
+            long shipId,
+            Vec3 velocity,
+            double mass,
+            boolean collision,
+            ImpactPart impactPart
+    ) {
+        ShipCrashHooks.PhysicsSampleOutcome outcome = ShipCrashHooks.onShipPhysicsSampleDetailed(
+                source.getServer(),
+                shipId,
+                source.getServer().getTickCount(),
+                velocity,
+                mass,
+                collision,
+                impactPart
+        );
+        ShipBindingRecord record = outcome.record();
+        CrashPhysicsEngine.CrashResult result = outcome.result();
+
+        source.sendSuccess(() -> Component.literal("Physics sample applied | shipId=" + shipId
+                + " | impactPart=" + impactPart.name().toLowerCase()
+                + " | crashed=" + record.crashed()
+                + " | severity=" + result.severity().name().toLowerCase()
+                + " | damage=" + String.format("%.2f", result.damage())
+                + " | damping=" + String.format("%.2f", result.bounceDamping())
+                + " | integrity=" + String.format("%.2f", record.structuralIntegrity())
+                + " | failedParts=" + record.failedPartsSummary()
+                + " | slug=" + record.slug()), true);
+        return 1;
+    }
+
     private static String format(ShipBindingRecord record) {
         String owner = record.owner() == null ? "none" : record.owner().toString();
         String creator = record.createdBy() == null ? "unknown" : record.createdBy().toString();
@@ -221,9 +276,16 @@ public final class ShipCommands {
                 + " crashes=" + record.crashCount()
                 + " integrity=" + String.format("%.2f", record.structuralIntegrity())
                 + " lastSeverity=" + record.lastCrashSeverity()
+                + " lastImpactPart=" + record.lastImpactPart()
                 + " lastEnergy=" + String.format("%.2f", record.lastImpactEnergy())
                 + " peakEnergy=" + String.format("%.2f", record.peakImpactEnergy())
                 + " lastCrashTick=" + record.lastCrashTick()
+                + " engine=" + String.format("%.2f", record.engineHealth())
+                + " lift=" + String.format("%.2f", record.liftHealth())
+                + " control=" + String.format("%.2f", record.controlHealth())
+                + " hull=" + String.format("%.2f", record.hullHealth())
+                + " failedCount=" + record.failedPartCount()
+                + " failedParts=" + record.failedPartsSummary()
                 + " owner=" + owner
                 + " creator=" + creator;
     }

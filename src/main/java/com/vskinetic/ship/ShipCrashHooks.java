@@ -34,7 +34,8 @@ public final class ShipCrashHooks {
                 gameTime,
                 linearVelocity,
                 estimatedMass,
-                hadCollisionSignal
+                hadCollisionSignal,
+                ImpactPart.AUTO
         );
         return outcome.record();
     }
@@ -46,6 +47,26 @@ public final class ShipCrashHooks {
             Vec3 linearVelocity,
             double estimatedMass,
             boolean hadCollisionSignal
+    ) {
+        return onShipPhysicsSampleDetailed(
+                server,
+                shipId,
+                gameTime,
+                linearVelocity,
+                estimatedMass,
+                hadCollisionSignal,
+                ImpactPart.AUTO
+        );
+    }
+
+    public static PhysicsSampleOutcome onShipPhysicsSampleDetailed(
+            MinecraftServer server,
+            long shipId,
+            long gameTime,
+            Vec3 linearVelocity,
+            double estimatedMass,
+            boolean hadCollisionSignal,
+            ImpactPart impactPart
     ) {
         CrashPhysicsEngine.CrashResult result = PHYSICS.sample(
                 shipId,
@@ -59,7 +80,7 @@ public final class ShipCrashHooks {
             return new PhysicsSampleOutcome(ShipRegistryData.get(server).getOrCreate(shipId), result);
         }
 
-        ShipBindingRecord record = ShipRegistryData.get(server).applyCrash(shipId, gameTime, result);
+        ShipBindingRecord record = ShipRegistryData.get(server).applyCrash(shipId, gameTime, result, impactPart);
         return new PhysicsSampleOutcome(record, result);
     }
 

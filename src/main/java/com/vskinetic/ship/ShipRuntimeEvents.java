@@ -55,6 +55,7 @@ public final class ShipRuntimeEvents {
         Vec3 velocity = toMinecraft(ship.getVelocity());
         boolean inferredCollision = inferCollision(runtimeState, velocity);
         boolean hadCollisionSignal = inferredCollision || collisionSignals.contains(shipId);
+        ImpactPart impactPart = inferImpactPart(ship, previousVelocity, velocity);
 
         ShipCrashHooks.PhysicsSampleOutcome outcome = ShipCrashHooks.onShipPhysicsSampleDetailed(
                 level.getServer(),
@@ -62,7 +63,8 @@ public final class ShipRuntimeEvents {
                 level.getGameTime(),
                 velocity,
                 ship.getInertiaData().getShipMass(),
-                hadCollisionSignal
+                hadCollisionSignal,
+                impactPart
         );
 
         runtimeState.lastVelocity = velocity;
@@ -194,7 +196,7 @@ public final class ShipRuntimeEvents {
             case NONE -> 0.0D;
         };
         runtimeState.postCrashDampingTicks = Math.max(runtimeState.postCrashDampingTicks, ticks);
-        runtimeState.postCrashDamping = Math.max(runtimeState.postCrashDamping, deceleration * Config.crashBounceDamping);
+        runtimeState.postCrashDamping = Math.max(runtimeState.postCrashDamping, Math.max(result.bounceDamping(), deceleration));
     }
 
     private void applyPostCrashDamping(LoadedServerShip ship, RuntimeShipState runtimeState) {
@@ -203,7 +205,6 @@ public final class ShipRuntimeEvents {
         }
         applyBrakingForce(ship, runtimeState.postCrashDamping);
         runtimeState.postCrashDampingTicks--;
-        runtimeState.postCrashDamping *= 0.90D;
     }
 
     private void armGroundSettling(
@@ -234,7 +235,7 @@ public final class ShipRuntimeEvents {
         runtimeState.groundSettleTicks = Math.max(runtimeState.groundSettleTicks, ticks);
         runtimeState.groundSettleStrength = Math.max(
                 runtimeState.groundSettleStrength,
-                strength * (1.0D + Math.min(1.25D, downwardSpeed / 8.0D)) * Config.crashBounceDamping
+                strength * (1.0D + Math.min(1.25D, downwardSpeed / 8.0D)) * Math.max(0.01D, result.bounceDamping())
         );
     }
 
@@ -505,6 +506,33 @@ public final class ShipRuntimeEvents {
 
     private static Vec3 toMinecraft(Vector3dc vector) {
         return new Vec3(vector.x(), vector.y(), vector.z());
+    }
+
+    private static ImpactPart inferImpactPart(LoadedServerShip ship, Vec3 previousVelocity, Vec3 currentVelocity) {
+        if (previousVelocity == null) {
+            return ImpactPart.AUTO;
+        }
+
+        Vec3 approachVelocity = previousVelocity.lengthSqr() >= currentVelocity.lengthSqr() ? previousVelocity : currentVelocity;
+        if (approachVelocity.lengthSqr() < 1.0E-4D) {
+            return ImpactPart.AUTO;
+        }
+
+        Vector3d approachLocal = ship.getTransform().getWorldToShip().transformDirection(
+                new Vector3d(approachVelocity.x, approachVelocity.y, approachVelocity.z),
+                new Vector3d()
+        );
+        double ax = Math.abs(approachLocal.x());
+        double ay = Math.abs(approachLocal.y());
+        double az = Math.abs(approachLocal.z());
+
+        if (ay >= ax && ay >= az) {
+            return approachLocal.y < 0.0D ? ImpactPart.LIFT : ImpactPart.HULL;
+        }
+        if (az >= ax) {
+            return approachLocal.z >= 0.0D ? ImpactPart.HULL : ImpactPart.ENGINE;
+        }
+        return ImpactPart.CONTROL;
     }
 
     private static String prettySeverity(CrashPhysicsEngine.CrashSeverity severity) {

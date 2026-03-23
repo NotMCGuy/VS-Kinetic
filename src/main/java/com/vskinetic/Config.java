@@ -47,6 +47,38 @@ public class Config
             .comment("When recovering a ship, integrity is restored to at least this value.")
             .defineInRange("recoveryIntegrityFloor", 35.0D, 0.0D, 100.0D);
 
+    private static final ForgeConfigSpec.DoubleValue PART_DAMAGE_MULTIPLIER = BUILDER
+            .comment("Global multiplier applied to subsystem damage during crashes.")
+            .defineInRange("partDamageMultiplier", 1.0D, 0.0D, 100.0D);
+
+    private static final ForgeConfigSpec.DoubleValue PART_FAILURE_HEALTH_THRESHOLD = BUILDER
+            .comment("Subsystem health at or below this value is considered failed.")
+            .defineInRange("partFailureHealthThreshold", 30.0D, 0.0D, 100.0D);
+
+    private static final ForgeConfigSpec.DoubleValue CATASTROPHIC_PART_FAILURE_CHANCE = BUILDER
+            .comment("Additional chance for immediate subsystem failure on catastrophic impacts.")
+            .defineInRange("catastrophicPartFailureChance", 0.35D, 0.0D, 1.0D);
+
+    private static final ForgeConfigSpec.DoubleValue PART_RECOVERY_FLOOR = BUILDER
+            .comment("When recovering a ship, each subsystem is restored to at least this value.")
+            .defineInRange("partRecoveryFloor", 45.0D, 0.0D, 100.0D);
+
+    private static final ForgeConfigSpec.DoubleValue SCRAPE_EXPLOSION_DAMPING = BUILDER
+            .comment("Bounce damping used for scrape impacts.")
+            .defineInRange("scrapeExplosionDamping", 0.80D, 0.0D, 20.0D);
+
+    private static final ForgeConfigSpec.DoubleValue HARD_EXPLOSION_DAMPING = BUILDER
+            .comment("Bounce damping used for hard impacts.")
+            .defineInRange("hardExplosionDamping", 1.80D, 0.0D, 20.0D);
+
+    private static final ForgeConfigSpec.DoubleValue CATASTROPHIC_EXPLOSION_DAMPING = BUILDER
+            .comment("Bounce damping used for catastrophic impacts.")
+            .defineInRange("catastrophicExplosionDamping", 3.00D, 0.0D, 20.0D);
+
+    private static final ForgeConfigSpec.DoubleValue PRIMARY_CRUMPLE_SHARE = BUILDER
+            .comment("How much subsystem damage goes to the first impacted part.")
+            .defineInRange("primaryCrumpleShare", 0.72D, 0.0D, 1.0D);
+
     private static final ForgeConfigSpec.DoubleValue LOW_INTEGRITY_THRESHOLD = BUILDER
             .comment("Integrity threshold where damaged ships start suffering ongoing drag.")
             .defineInRange("lowIntegrityThreshold", 45.0D, 0.0D, 100.0D);
@@ -118,6 +150,14 @@ public class Config
     public static double catastrophicCrashScore;
     public static double crashDamageMultiplier;
     public static double recoveryIntegrityFloor;
+    public static double partDamageMultiplier;
+    public static double partFailureHealthThreshold;
+    public static double catastrophicPartFailureChance;
+    public static double partRecoveryFloor;
+    public static double scrapeExplosionDamping;
+    public static double hardExplosionDamping;
+    public static double catastrophicExplosionDamping;
+    public static double primaryCrumpleShare;
     public static double lowIntegrityThreshold;
     public static double criticalIntegrityThreshold;
     public static double lowIntegrityDeceleration;
@@ -146,6 +186,14 @@ public class Config
         catastrophicCrashScore = CATASTROPHIC_CRASH_SCORE.get();
         crashDamageMultiplier = CRASH_DAMAGE_MULTIPLIER.get();
         recoveryIntegrityFloor = RECOVERY_INTEGRITY_FLOOR.get();
+        partDamageMultiplier = PART_DAMAGE_MULTIPLIER.get();
+        partFailureHealthThreshold = PART_FAILURE_HEALTH_THRESHOLD.get();
+        catastrophicPartFailureChance = CATASTROPHIC_PART_FAILURE_CHANCE.get();
+        partRecoveryFloor = PART_RECOVERY_FLOOR.get();
+        scrapeExplosionDamping = SCRAPE_EXPLOSION_DAMPING.get();
+        hardExplosionDamping = HARD_EXPLOSION_DAMPING.get();
+        catastrophicExplosionDamping = CATASTROPHIC_EXPLOSION_DAMPING.get();
+        primaryCrumpleShare = PRIMARY_CRUMPLE_SHARE.get();
         lowIntegrityThreshold = LOW_INTEGRITY_THRESHOLD.get();
         criticalIntegrityThreshold = CRITICAL_INTEGRITY_THRESHOLD.get();
         lowIntegrityDeceleration = LOW_INTEGRITY_DECELERATION.get();
