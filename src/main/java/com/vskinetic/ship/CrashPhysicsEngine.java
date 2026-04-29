@@ -4,10 +4,30 @@ import com.vskinetic.Config;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 public class CrashPhysicsEngine {
     private final Map<Long, ShipMotionState> stateByShip = new HashMap<>();
+
+    public enum ImpactPart {
+        AUTO,
+        HULL,
+        ENGINE,
+        LIFT,
+        CONTROL;
+
+        public static ImpactPart parseOrAuto(String value) {
+            if (value == null || value.isBlank()) {
+                return AUTO;
+            }
+            try {
+                return ImpactPart.valueOf(value.trim().toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException ignored) {
+                return AUTO;
+            }
+        }
+    }
 
     public CrashResult sample(long shipId, long gameTime, Vec3 velocity, double mass, boolean collisionSignal) {
         ShipMotionState state = stateByShip.computeIfAbsent(shipId, ignored -> new ShipMotionState());
@@ -157,36 +177,13 @@ public class CrashPhysicsEngine {
             return new CrashResult(false, speed, deltaV, impactEnergy, 0.0D, CrashSeverity.NONE, 0.0D, 0.0D);
         }
 
-        public boolean crash() {
-            return crash;
-        }
-
-        public double speed() {
-            return speed;
-        }
-
-        public double deltaV() {
-            return deltaV;
-        }
-
-        public double impactEnergy() {
-            return impactEnergy;
-        }
-
-        public double crashScore() {
-            return crashScore;
-        }
-
-        public CrashSeverity severity() {
-            return severity;
-        }
-
-        public double damage() {
-            return damage;
-        }
-
-        public double bounceDamping() {
-            return bounceDamping;
-        }
+        public boolean crash()         { return crash; }
+        public double speed()          { return speed; }
+        public double deltaV()         { return deltaV; }
+        public double impactEnergy()   { return impactEnergy; }
+        public double crashScore()     { return crashScore; }
+        public CrashSeverity severity(){ return severity; }
+        public double damage()         { return damage; }
+        public double bounceDamping()  { return bounceDamping; }
     }
 }
