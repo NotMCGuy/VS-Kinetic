@@ -146,6 +146,10 @@ dependencies {
         exclude group: 'org.joml', module: ''
     }
 
+    implementation("org.joml:joml-primitives:1.10.0") {
+        exclude group: 'org.joml', module: ''
+    }
+
     implementation 'thedarkcolour:kotlinforforge:4.11.0'
 }
 
