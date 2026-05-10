@@ -32,9 +32,9 @@ public class FuckAround {
     private static final double IMPULSE_MULTIPLIER = 2.0;
     private static final double RESISTANCE_SCALE = 750.0;
     private static final double MIN_IMPULSE = 100_000.0;
-    private static final double MAX_IMPULSE = 1_000_000.0;
+    private static final double MAX_IMPULSE = 100_000_000.0;
 
-    private static final double PROPAGATION_ATTENUATION = 0.8;
+    private static final double PROPAGATION_ATTENUATION = 0.25;
     private static final int MAX_PROPAGATION_DEPTH = 4;
 
     // A ship this volume or larger gets full propagation depth and attenuation.
